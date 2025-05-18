@@ -1,20 +1,20 @@
 import streamlit as st
 from googletrans import Translator, LANGUAGES
 import nltk
-from nltk.tokenize import sent_tokenize
+from nltk.tokenize.punkt import PunktSentenceTokenizer, PunktParameters
 from gtts import gTTS
 import base64
 from io import BytesIO
 
-# Download NLTK data
+# Download required NLTK data
 nltk.download('punkt')
+nltk.download('punkt_tab')
 
 # Initialize Translator
 translator = Translator()
 
 # Set page config
 st.set_page_config(page_title="LinguaNova GT+", page_icon="🌍", layout="centered")
-
 st.title("🌍 LinguaNova GT+ (Google Translate Supreme)")
 st.markdown("Translate up to 100,000 characters, hear it, copy it, download it — multilingual magic!")
 
@@ -43,9 +43,12 @@ with tab2:
         st.text_area("File Content Preview", value=file_text, height=300)
         text = file_text.strip()
 
-# Sentence splitting function
+# Use explicit PunktSentenceTokenizer to avoid 'punkt_tab' error
+punkt_param = PunktParameters()
+tokenizer = PunktSentenceTokenizer(punkt_param)
+
 def split_into_chunks(text, max_chars=4500):
-    sentences = sent_tokenize(text)
+    sentences = tokenizer.tokenize(text)
     chunks = []
     current_chunk = ""
 
@@ -60,7 +63,6 @@ def split_into_chunks(text, max_chars=4500):
 
     return chunks
 
-# Text-to-Speech and audio download helpers
 def text_to_speech(text, lang_code):
     tts = gTTS(text=text, lang=lang_code)
     mp3_fp = BytesIO()
@@ -73,7 +75,6 @@ def get_audio_download_link(mp3_fp, filename):
     href = f'<a href="data:audio/mp3;base64,{b64}" download="{filename}">Download Audio</a>'
     return href
 
-# Translation button and process
 if st.button("🌐 Translate"):
     if not text:
         st.warning("Please provide some text or upload a file.")
@@ -104,6 +105,5 @@ if st.button("🌐 Translate"):
             except Exception as e:
                 st.error(f"Something went wrong: {e}")
 
-# Footer
 st.markdown("---")
 st.caption("Created with care by Sugar & ChatGPT")
