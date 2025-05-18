@@ -1,15 +1,19 @@
 import streamlit as st
 from langdetect import detect
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-import os
 
-# Title & Description
-st.set_page_config(page_title="LinguaNova", page_icon="馃實", layout="centered")
+# --- CONFIG ---
+st.set_page_config(page_title="LinguaNova", page_icon="🌐", layout="centered")
 
-st.markdown("## 馃實 LinguaNova: Universal Translator")
-st.markdown("Translate **any language** into English or your choice. Type or upload 鈥� we decode the world for you.")
+# --- LANGUAGES ---
+lang_map = {
+    'bn': 'Bengali', 'en': 'English', 'fr': 'French', 'es': 'Spanish',
+    'de': 'German', 'hi': 'Hindi', 'ja': 'Japanese', 'ko': 'Korean',
+    'zh-cn': 'Chinese', 'ru': 'Russian', 'ar': 'Arabic'
+}
+reverse_lang_map = {v: k for k, v in lang_map.items()}
 
-# Caching model
+# --- LOAD MODEL ---
 @st.cache_resource(show_spinner=False)
 def load_model():
     model_name = "csebuetnlp/mT5_multilingual_XLSum"
@@ -19,41 +23,26 @@ def load_model():
 
 tokenizer, model = load_model()
 
-# Language map
-lang_map = {
-    'bn': 'Bengali',
-    'en': 'English',
-    'fr': 'French',
-    'es': 'Spanish',
-    'de': 'German',
-    'hi': 'Hindi',
-    'ja': 'Japanese',
-    'ko': 'Korean',
-    'zh-cn': 'Chinese',
-    'ru': 'Russian',
-    'ar': 'Arabic'
-}
-
-# Translation function
-def translate(text, src_lang, tgt_lang="English"):
-    input_text = f"translate {src_lang} to {tgt_lang}: {text}"
+# --- TRANSLATION FUNCTION ---
+def translate(text, src_lang_name, tgt_lang_name):
+    src_code = reverse_lang_map.get(src_lang_name, "en")
+    tgt_code = reverse_lang_map.get(tgt_lang_name, "en")
+    input_text = f"translate {src_code} to {tgt_code}: {text}"
     inputs = tokenizer(input_text, return_tensors="pt", max_length=1024, truncation=True)
-    outputs = model.generate(
-        **inputs,
-        max_length=1024,
-        num_beams=4,
-        early_stopping=True
-    )
-    translated = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return translated
+    outputs = model.generate(**inputs, max_length=1024, num_beams=4, early_stopping=True)
+    return tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-# Sidebar
+# --- SIDEBAR ---
 st.sidebar.title("Settings")
-target_language = st.sidebar.selectbox("Translate to:", ["English", "Bengali", "French", "Spanish", "German", "Hindi"])
+target_language = st.sidebar.selectbox("Translate to:", list(reverse_lang_map.keys()))
 
-# Main Input Area
-tab1, tab2 = st.tabs(["鉁嶏笍 Type or Paste", "馃搧 Upload File"])
+# --- UI ---
+st.markdown("## 🌐 LinguaNova: Universal Translator")
+st.markdown("Translate **any language** into your selected one. Type or upload — we decode the world for you.")
 
+tab1, tab2 = st.tabs(["✍️ Type or Paste", "📤 Upload File"])
+
+user_text = ""
 with tab1:
     user_text = st.text_area("Enter text here (any language)", height=250)
 
@@ -64,14 +53,15 @@ with tab2:
         st.text_area("File content preview", value=file_text, height=250)
         user_text = file_text
 
-if st.button("馃寪 Translate"):
+# --- TRANSLATE BUTTON ---
+if st.button("🔄 Translate"):
     if not user_text.strip():
         st.warning("Please provide some input.")
     else:
         with st.spinner("Detecting language and translating..."):
             try:
                 detected_code = detect(user_text)
-                detected_lang = lang_map.get(detected_code, detected_code)
+                detected_lang = lang_map.get(detected_code, "Unknown")
             except:
                 detected_lang = "Unknown"
 
@@ -84,19 +74,19 @@ if st.button("馃寪 Translate"):
                 st.success("Translation Complete:")
                 st.text_area("Translated Text", value=translation, height=200)
 
-# Optional: Add history
-if 'history' not in st.session_state:
-    st.session_state.history = []
+                # Save to session history
+                if 'history' not in st.session_state:
+                    st.session_state.history = []
+                st.session_state.history.append((user_text, translation))
+                if len(st.session_state.history) > 5:
+                    st.session_state.history.pop(0)
 
-if user_text:
-    st.session_state.history.append((user_text, translation))
-    if len(st.session_state.history) > 5:
-        st.session_state.history.pop(0)
+# --- HISTORY ---
+if 'history' in st.session_state:
+    with st.expander("🕘 Translation History (Last 5)"):
+        for i, (src, trans) in enumerate(reversed(st.session_state.history)):
+            st.markdown(f"**{i+1}.** `{src[:40]}...` ➡️ `{trans[:60]}...`")
 
-with st.expander("馃晿 Translation History (Last 5)"):
-    for i, (src, trans) in enumerate(reversed(st.session_state.history)):
-        st.markdown(f"**{i+1}.** `{src[:40]}...` 鈫� `{trans[:60]}...`")
-
-# Footer
+# --- FOOTER ---
 st.markdown("---")
 st.markdown("Created with love by **Sugar & ChatGPT**")
