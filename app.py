@@ -1,92 +1,63 @@
 import streamlit as st
-from langdetect import detect
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import MarianMTModel, MarianTokenizer
 
-# --- CONFIG ---
-st.set_page_config(page_title="LinguaNova", page_icon="🌐", layout="centered")
-
-# --- LANGUAGES ---
-lang_map = {
-    'bn': 'Bengali', 'en': 'English', 'fr': 'French', 'es': 'Spanish',
-    'de': 'German', 'hi': 'Hindi', 'ja': 'Japanese', 'ko': 'Korean',
-    'zh-cn': 'Chinese', 'ru': 'Russian', 'ar': 'Arabic'
+# Define supported language codes and their full names
+LANGUAGES = {
+    'en': 'English',
+    'fr': 'French',
+    'de': 'German',
+    'es': 'Spanish',
+    'it': 'Italian',
+    'ru': 'Russian',
+    'zh': 'Chinese',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'ar': 'Arabic',
+    'hi': 'Hindi',
+    'bn': 'Bengali',
+    'ur': 'Urdu',
+    'pt': 'Portuguese',
+    'nl': 'Dutch'
 }
-reverse_lang_map = {v: k for k, v in lang_map.items()}
 
-# --- LOAD MODEL ---
-@st.cache_resource(show_spinner=False)
-def load_model():
-    model_name = "csebuetnlp/mT5_multilingual_XLSum"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+# Create reverse mapping for language selection
+LANGUAGE_CODES = {v: k for k, v in LANGUAGES.items()}
+
+# Function to load the appropriate MarianMT model and tokenizer
+@st.cache_resource
+def load_model(src_lang, tgt_lang):
+    model_name = f'Helsinki-NLP/opus-mt-{src_lang}-{tgt_lang}'
+    tokenizer = MarianTokenizer.from_pretrained(model_name)
+    model = MarianMTModel.from_pretrained(model_name)
     return tokenizer, model
 
-tokenizer, model = load_model()
+# Streamlit app layout
+st.title("🌍 Multilingual Translator")
+st.markdown("Translate text between multiple languages using Hugging Face's MarianMT models.")
 
-# --- TRANSLATION FUNCTION ---
-def translate(text, src_lang_name, tgt_lang_name):
-    src_code = reverse_lang_map.get(src_lang_name, "en")
-    tgt_code = reverse_lang_map.get(tgt_lang_name, "en")
-    input_text = f"translate {src_code} to {tgt_code}: {text}"
-    inputs = tokenizer(input_text, return_tensors="pt", max_length=1024, truncation=True)
-    outputs = model.generate(**inputs, max_length=1024, num_beams=4, early_stopping=True)
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+# Language selection
+col1, col2 = st.columns(2)
+with col1:
+    src_language = st.selectbox("Select source language:", list(LANGUAGES.values()), index=0)
+with col2:
+    tgt_language = st.selectbox("Select target language:", list(LANGUAGES.values()), index=1)
 
-# --- SIDEBAR ---
-st.sidebar.title("Settings")
-target_language = st.sidebar.selectbox("Translate to:", list(reverse_lang_map.keys()))
+# Text input
+text_to_translate = st.text_area("Enter text to translate:", height=150)
 
-# --- UI ---
-st.markdown("## 🌐 LinguaNova: Universal Translator")
-st.markdown("Translate **any language** into your selected one. Type or upload — we decode the world for you.")
-
-tab1, tab2 = st.tabs(["✍️ Type or Paste", "📤 Upload File"])
-
-user_text = ""
-with tab1:
-    user_text = st.text_area("Enter text here (any language)", height=250)
-
-with tab2:
-    uploaded_file = st.file_uploader("Upload a .txt file", type="txt")
-    if uploaded_file:
-        file_text = uploaded_file.read().decode("utf-8")
-        st.text_area("File content preview", value=file_text, height=250)
-        user_text = file_text
-
-# --- TRANSLATE BUTTON ---
-if st.button("🔄 Translate"):
-    if not user_text.strip():
-        st.warning("Please provide some input.")
+# Translate button
+if st.button("Translate"):
+    if not text_to_translate.strip():
+        st.warning("Please enter text to translate.")
     else:
-        with st.spinner("Detecting language and translating..."):
-            try:
-                detected_code = detect(user_text)
-                detected_lang = lang_map.get(detected_code, "Unknown")
-            except:
-                detected_lang = "Unknown"
-
-            st.info(f"Detected Language: **{detected_lang}**")
-
-            if detected_lang == "Unknown":
-                st.error("Could not detect language. Try entering more text.")
-            else:
-                translation = translate(user_text, detected_lang, target_language)
-                st.success("Translation Complete:")
-                st.text_area("Translated Text", value=translation, height=200)
-
-                # Save to session history
-                if 'history' not in st.session_state:
-                    st.session_state.history = []
-                st.session_state.history.append((user_text, translation))
-                if len(st.session_state.history) > 5:
-                    st.session_state.history.pop(0)
-
-# --- HISTORY ---
-if 'history' in st.session_state:
-    with st.expander("🕘 Translation History (Last 5)"):
-        for i, (src, trans) in enumerate(reversed(st.session_state.history)):
-            st.markdown(f"**{i+1}.** `{src[:40]}...` ➡️ `{trans[:60]}...`")
-
-# --- FOOTER ---
-st.markdown("---")
-st.markdown("Created with love by **Sugar & ChatGPT**")
+        src_code = LANGUAGE_CODES[src_language]
+        tgt_code = LANGUAGE_CODES[tgt_language]
+        try:
+            tokenizer, model = load_model(src_code, tgt_code)
+            inputs = tokenizer(text_to_translate, return_tensors="pt", padding=True)
+            translated = model.generate(**inputs)
+            translated_text = tokenizer.decode(translated[0], skip_special_tokens=True)
+            st.success("Translation:")
+            st.write(translated_text)
+        except Exception as e:
+            st.error(f"Translation failed: {e}")
